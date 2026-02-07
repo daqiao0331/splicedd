@@ -35,3 +35,14 @@ export async function createPlaceholder(baseDir: string, relativePath: string) {
   });
 }
 
+/**
+ * Deletes a sample file on the path retrieved by combining `baseDir` and `relativePath`.
+ */
+// /src-tauri/src/files.rs
+export async function deleteSampleFile(baseDir: string, relativePath: string) {
+  await invoke("delete_sample_file", {
+    baseDir,
+    relativePath
+  });
+}
+

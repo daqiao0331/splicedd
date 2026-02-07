@@ -14,3 +14,75 @@ body {
   background-image: url("img/bg-gradient.png");
   background-position: center;
 }
+
+/* === 2019 Splice-inspired layout === */
+
+.app-layout {
+  display: flex;
+  width: 100%;
+  height: 100vh;
+}
+
+.app-content {
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 64px;
+  min-width: 64px;
+  background-color: #1a1a2e;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 16px;
+  gap: 8px;
+  border-right: 1px solid #2a2a3e;
+}
+
+.sidebar-logo {
+  margin-bottom: 16px;
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+
+.sidebar-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  color: #6b7280;
+  cursor: pointer;
+  font-size: 10px;
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.sidebar-tab:hover {
+  color: #d1d5db;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar-tab-active {
+  color: #818cf8;
+  border-left: 3px solid #818cf8;
+  background-color: rgba(129, 140, 248, 0.08);
+}
+
+/* Local samples panel */
+.local-samples-panel {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+}

@@ -1,33 +1,54 @@
 # Splicedd Skills — Windows Requirements
 
 ## Overview
-This document specifies the Windows-specific feature requirements for Splicedd.
+This document specifies the Windows-specific feature requirements for Splicedd, focusing on local sampling management and a 2019 Splice-inspired front-end design.
 
-## Skill 1: Proportional Page Scaling on Item Drag
+## Skill 1: Local Sampling Management
 
 ### Description
-When dragging sample items within the application, the page layout must automatically scale proportionally and maintain its aspect ratio. Window resizing should preserve proportional content layout so that UI elements remain properly sized and positioned.
+Provide local sample library management that mirrors the Splice desktop app strategy. Users can browse, preview, and manage samples that have been downloaded to their configured sample directory. The local library panel shows all downloaded WAV files organized by sample pack, with the ability to delete samples and view file metadata.
 
 ### Acceptance Criteria
-- The application window maintains a fixed aspect ratio (2:1) when the user resizes it.
-- Content within the window scales proportionally with the window size.
-- The minimum window dimensions are enforced (800×400) to prevent the UI from becoming unusable.
-- Drag-and-drop interactions remain functional at all supported window sizes.
+- A "My Library" sidebar tab allows users to switch between online search and local sample browsing.
+- The local library scans the configured `sampleDir` directory and lists all downloaded `.wav` files grouped by pack folder.
+- Each local sample entry displays the file name, file size, and pack name.
+- Users can delete individual local samples via a delete button on each entry.
+- The local library refreshes automatically when the user switches to the tab or when samples are downloaded.
+- All existing search, playback, and drag-and-drop functions remain unchanged.
 
 ### Platform
 - Windows only
 
 ---
 
-## Skill 2: Page Visibility During Item Operations
+## Skill 2: 2019 Splice Front-End Design
 
 ### Description
-When adding or dragging an item (sample), the application window must not be hidden or lose visibility. The window should remain visible and accessible at all times during item operations. The only way to close/hide the window is by explicitly clicking the close (X) button.
+Redesign the front-end to follow the 2019 Splice desktop application aesthetic. This includes a dark sidebar navigation on the left with icon-based tabs, a main content area on the right, and a consistent dark theme. The layout uses a sidebar + content panel pattern.
 
 ### Acceptance Criteria
-- The window has the `alwaysOnTop` property enabled, keeping it above other windows during drag operations.
-- The window remains on top of other application windows when visible, so it is not accidentally hidden by interacting with other applications during drag-and-drop.
-- The close (X) button is the primary way to dismiss/hide the window.
+- A fixed-width dark sidebar appears on the left side of the application window.
+- The sidebar contains navigation tabs: "Search" (online sample search) and "My Library" (local sample management).
+- The active tab is visually highlighted in the sidebar.
+- The main content area occupies the remaining width to the right of the sidebar.
+- The overall design uses a dark color scheme consistent with the 2019 Splice desktop app.
+- All existing functions (search, filters, settings, playback, drag-and-drop) continue to work unchanged in the "Search" tab.
+
+### Platform
+- Windows only
+
+---
+
+## Skill 3: Test Suite
+
+### Description
+A test suite validates the local sampling management logic and UI components using Vitest and React Testing Library.
+
+### Acceptance Criteria
+- Tests cover the `LocalSampleManager` utility (scanning, listing, deleting samples).
+- Tests cover the sidebar navigation component (tab switching).
+- Tests cover the local samples panel (rendering sample entries, delete action).
+- All tests pass successfully.
 
 ### Platform
 - Windows only
