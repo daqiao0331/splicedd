@@ -14,8 +14,3 @@ body {
   background-image: url("img/bg-gradient.png");
   background-position: center;
 }
-
-/* Proportional scaling: scale content based on viewport width */
-main {
-  font-size: clamp(12px, 1.1vw, 16px);
-}

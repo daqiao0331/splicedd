@@ -49,10 +49,7 @@
       {
         "title": "Splicedd",
         "width": 1200,
-        "height": 600,
-        "minWidth": 800,
-        "minHeight": 400,
-        "alwaysOnTop": true
+        "height": 600
       }
     ],
     "security": {
