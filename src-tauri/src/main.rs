@@ -1,12 +1,15 @@
-
-
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 mod files;
 
 /// The fixed aspect ratio (width / height) to enforce on window resize.
 const ASPECT_RATIO: f64 = 2.0;
+
+/// Guard to prevent recursive resize events.
+static RESIZING: AtomicBool = AtomicBool::new(false);
 
 fn main() {
     tauri::Builder::default()
@@ -18,16 +21,21 @@ fn main() {
         ])
         .on_window_event(|event| {
             if let tauri::WindowEvent::Resized(size) = event.event() {
-                let window = event.window();
+                if RESIZING.load(Ordering::SeqCst) {
+                    return;
+                }
                 let width = size.width as f64;
                 let expected_height = (width / ASPECT_RATIO).round() as u32;
-                if size.height != expected_height {
-                    let _ = window.set_size(tauri::Size::Physical(
+                // Only adjust if the difference exceeds a small tolerance (2px)
+                if (size.height as i32 - expected_height as i32).unsigned_abs() > 2 {
+                    RESIZING.store(true, Ordering::SeqCst);
+                    let _ = event.window().set_size(tauri::Size::Physical(
                         tauri::PhysicalSize {
                             width: size.width,
                             height: expected_height,
                         },
                     ));
+                    RESIZING.store(false, Ordering::SeqCst);
                 }
             }
         })

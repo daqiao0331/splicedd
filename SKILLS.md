@@ -26,9 +26,8 @@ When adding or dragging an item (sample), the application window must not be hid
 
 ### Acceptance Criteria
 - The window has the `alwaysOnTop` property enabled, keeping it above other windows during drag operations.
-- The window cannot be minimized via the taskbar or system shortcuts; it stays visible.
-- The close (X) button remains the only way to dismiss/hide the window.
-- The window cannot be accidentally hidden by interacting with other applications during drag-and-drop.
+- The window remains on top of other application windows when visible, so it is not accidentally hidden by interacting with other applications during drag-and-drop.
+- The close (X) button is the primary way to dismiss/hide the window.
 
 ### Platform
 - Windows only
