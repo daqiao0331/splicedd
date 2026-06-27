@@ -11,7 +11,10 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             files::write_sample_file,
             files::file_exists,
-            files::create_placeholder_file
+            files::create_placeholder_file,
+            files::scan_sample_files,
+            files::read_sample_file,
+            files::delete_sample_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -47,9 +47,12 @@
     },
     "windows": [
       {
-        "title": "Splicedd",
-        "width": 1200,
-        "height": 600
+        "title": "splicedd",
+        "width": 960,
+        "height": 600,
+        "minWidth": 760,
+        "minHeight": 460,
+        "resizable": true
       }
     ],
     "security": {

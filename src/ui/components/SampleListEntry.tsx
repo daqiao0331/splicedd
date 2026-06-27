@@ -1,7 +1,5 @@
 import { Chip, CircularProgress, Tooltip } from "@nextui-org/react";
-import { ClockCircleLinearIcon, ClockSquareBoldIcon } from '@nextui-org/shared-icons'
-import { MusicalNoteIcon } from "@heroicons/react/20/solid";
-import { PlayIcon, StopIcon } from "@heroicons/react/20/solid";
+import { MusicalNoteIcon, PlayIcon, StopIcon } from "@heroicons/react/20/solid";
 
 import { Response, ResponseType, fetch } from '@tauri-apps/api/http';
 import { useState } from "react";
@@ -23,7 +21,8 @@ const getChordTypeDisplay = (type: string | null) =>
 export type TagClickHandler = (tag: SpliceTag) => void;
 
 /**
- * Provides a view describing a Splice sample.
+ * A dense, single-line view of a Splice sample, styled after the 2019 Splice desktop
+ * browser: play button, pack thumbnail, name + tags, inline waveform, and metadata columns.
  */
 export default function SampleListEntry(
   { sample, ctx, onTagClick }: {
@@ -40,6 +39,8 @@ export default function SampleListEntry(
   const packCover = pack
     ? pack.files.find(x => x.asset_file_type_slug == "cover_image")?.url
     : "img/missing-cover.png";
+
+  const waveformUrl = sample.files.find(x => x.asset_file_type_slug == "waveform")?.url;
 
   let decodedSample: Uint8Array | null = null;
 
@@ -161,68 +162,77 @@ export default function SampleListEntry(
 
   return (
     <div onMouseOver={startFetching}
-      className={`flex w-full px-4 py-2 gap-8 rounded transition-background
-                    items-center hover:bg-foreground-100 cursor-grab select-none`}
+      className="group flex w-full items-center gap-3 px-2 h-11 rounded
+                 hover:bg-white/5 transition-colors cursor-grab select-none text-sm"
     >
       { /* when loading, set the cursor for everything to a waiting icon */}
       {fgLoading && <style> {`* { cursor: wait }`} </style>}
 
-      { /* sample pack */}
-      <div className="flex gap-4 min-w-20">
-        <Tooltip content={
-          <div className="flex flex-col gap-2 p-4">
-            <img src={packCover} alt={pack.name} width={128} height={128}></img>
-            <h1>{pack.name}</h1>
-          </div>
-        }>
-          <a href={`https://splice.com/sounds/labels/${pack.permalink_base_url}`} target="_blank">
-            <img src={packCover} alt={pack.name} width={32} height={32} />
-          </a>
-        </Tooltip>
+      { /* play / stop */}
+      <button onClick={handlePlayClick} aria-label={playing ? "Stop" : "Play"}
+        className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full
+                   text-foreground-500 group-hover:text-foreground hover:!text-splice-accent"
+        data-draggable="false"
+      >
+        {fgLoading
+          ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-5 h-5" }} />
+          : playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
+      </button>
 
-        <div onClick={handlePlayClick} className="cursor-pointer w-8">
-          {fgLoading ? <CircularProgress aria-label="Loading sample..." className="h-8" /> : playing ? <StopIcon /> : <PlayIcon />}
+      { /* pack thumbnail */}
+      <Tooltip content={
+        <div className="flex flex-col gap-2 p-2">
+          <img src={packCover} alt={pack?.name} width={128} height={128} />
+          <span className="text-xs">{pack?.name}</span>
+        </div>
+      }>
+        <a href={pack ? `https://splice.com/sounds/labels/${pack.permalink_base_url}` : undefined}
+          target="_blank" data-draggable="false" className="shrink-0"
+        >
+          <img src={packCover} alt={pack?.name} width={28} height={28} className="rounded" />
+        </a>
+      </Tooltip>
+
+      { /* name + tags */}
+      <div className="w-[34%] min-w-0 shrink-0" onMouseDown={handleDrag}>
+        <div className="flex items-center gap-1 truncate">
+          <span className="truncate">{sample.name.split("/").pop()}</span>
+        </div>
+        <div className="flex gap-1 overflow-hidden h-4">
+          {sample.tags.slice(0, 4).map(x => (
+            <Chip key={x.uuid} size="sm" variant="flat"
+              className="h-4 px-1 text-[10px] cursor-pointer"
+              onClick={() => onTagClick(x)} data-draggable="false"
+            >
+              {x.label}
+            </Chip>
+          ))}
         </div>
       </div>
 
-      { /* sample name + tags */}
-      <div className="grow" onMouseDown={handleDrag}>
-        <div className="flex gap-1 max-w-[50vw] overflow-clip">
-          {sample.name.split("/").pop()}
-          <div className="text-foreground-400">({sample.asset_category_slug})</div>
-        </div>
-
-        <div className="flex gap-1">{sample.tags.map(x => (
-          <Chip key={x.uuid}
-            size="sm" style={{ cursor: "pointer" }}
-            onClick={() => onTagClick(x)}
-            data-draggable="false"
-          >
-            {x.label}
-          </Chip>
-        ))}</div>
+      { /* inline waveform — fills the remaining space */}
+      <div className="flex-1 min-w-0 h-full flex items-center" onMouseDown={handleDrag}>
+        {waveformUrl &&
+          <img src={waveformUrl} alt="" aria-hidden
+            className={`splice-waveform ${playing ? "playing" : ""}`}
+            onError={e => (e.currentTarget.style.display = "none")}
+          />
+        }
       </div>
 
-      { /* other metadata */}
-      <div className="flex gap-8" onMouseDown={handleDrag}>
-        {sample.key != null ?
-          <div className="flex items-center gap-2 font-semibold text-foreground-500">
-            <MusicalNoteIcon className="w-4" />
-            <span>{`${sample.key.toUpperCase()}${getChordTypeDisplay(sample.chord_type)}`}</span>
-          </div>
-          : <></>}
-
-        <div className="flex items-center gap-2 font-semibold text-foreground-500">
-          <ClockCircleLinearIcon />
-          <span>{`${(sample.duration / 1000).toFixed(2)}s`}</span>
-        </div>
-
-        {sample.bpm != null ?
-          <div className="flex items-center gap-2 font-semibold text-foreground-500">
-            <ClockSquareBoldIcon />
-            <span>{`${sample.bpm} BPM`}</span>
-          </div>
-          : <></>}
+      { /* metadata columns */}
+      <div className="flex items-center gap-4 shrink-0 text-xs font-medium text-foreground-500 tabular-nums"
+        onMouseDown={handleDrag}
+      >
+        <span className="w-16 flex items-center gap-1 justify-end">
+          {sample.key != null && <>
+            <MusicalNoteIcon className="w-3.5" />
+            {`${sample.key.toUpperCase()}${getChordTypeDisplay(sample.chord_type)}`}
+          </>}
+        </span>
+        <span className="w-14 text-right">{sample.bpm != null ? `${sample.bpm} BPM` : ""}</span>
+        <span className="w-12 text-right">{`${(sample.duration / 1000).toFixed(1)}s`}</span>
+        <span className="w-12 text-right text-foreground-600 lowercase">{sample.asset_category_slug}</span>
       </div>
     </div>
   );
