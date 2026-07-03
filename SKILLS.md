@@ -51,9 +51,11 @@ previewable, and manageable from inside the app — without going back online.
 - All existing search / playback / drag-and-drop behaviour is unchanged.
 
 ### Implementation
-- Rust commands `scan_sample_files` and `delete_sample_file` in `src-tauri/src/files.rs`.
-- Native bindings `scanSampleFiles` / `deleteSampleFile` in `src/native.ts`.
-- `src/local/localSampleManager.ts` — `groupByPack` and library helpers (pure, testable).
+- Rust commands `scan_sample_files`, `read_sample_file`, and `delete_sample_file` in
+  `src-tauri/src/files.rs` (with path-traversal guards).
+- Native bindings `scanSampleFiles` / `readSampleFile` / `deleteSampleFile` in `src/native.ts`.
+- `src/local/grouping.ts` — pure `groupByPack` / `formatFileSize` helpers (unit-tested).
+- `src/ui/playback.ts` — shared `useAudioPreview` hook used by both online and local rows.
 - `src/ui/components/LocalSamplesPanel.tsx` — the Library view.
 
 ---

@@ -70,10 +70,8 @@ pub async fn scan_sample_files(base_dir: String) -> Result<Vec<LocalSampleFile>,
     let mut stack = vec![root.clone()];
 
     while let Some(dir) = stack.pop() {
-        let entries = match fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(e) => return Err(format!("Failed to read directory {dir:#?}: {e}")),
-        };
+        // Skip directories we can't read instead of failing the whole scan.
+        let Ok(entries) = fs::read_dir(&dir) else { continue };
 
         for entry in entries.flatten() {
             let path = entry.path();
@@ -117,47 +115,40 @@ pub async fn scan_sample_files(base_dir: String) -> Result<Vec<LocalSampleFile>,
     Ok(out)
 }
 
-/// Reads the raw bytes of a local sample at `base_dir` + `relative_path`, for in-app
-/// preview playback. Constrained to `.wav` files inside `base_dir`.
-#[tauri::command]
-pub async fn read_sample_file(base_dir: String, relative_path: String) -> Result<Vec<u8>, String> {
+/// Resolves `base_dir` + `relative_path` to a canonical path, requiring it to be a `.wav`
+/// file that stays inside `base_dir` (guarding against "../" path traversal).
+/// Returns `(canonical_root, canonical_target)`.
+fn resolve_wav_inside(base_dir: &str, relative_path: &str) -> Result<(PathBuf, PathBuf), String> {
     if !relative_path.ends_with(".wav") {
         return Err("The relative path must end with .wav".into());
     }
 
-    let root = PathBuf::from(&base_dir);
+    let root = PathBuf::from(base_dir);
     let mut full_path = root.clone();
-    full_path.push(&relative_path);
+    full_path.push(relative_path);
 
     let canonical_root = root.canonicalize().map_err(|e| format!("Invalid base directory: {e}"))?;
     let canonical_target = full_path.canonicalize().map_err(|e| format!("File not found: {e}"))?;
     if !canonical_target.starts_with(&canonical_root) {
-        return Err("Refusing to read a file outside of the sample directory".into());
+        return Err("The path escapes the sample directory".into());
     }
 
-    fs::read(&canonical_target).map_err(|e| format!("Failed to read file: {e}"))
+    Ok((canonical_root, canonical_target))
+}
+
+/// Reads the raw bytes of a local sample at `base_dir` + `relative_path`, for in-app
+/// preview playback. Constrained to `.wav` files inside `base_dir`.
+#[tauri::command]
+pub async fn read_sample_file(base_dir: String, relative_path: String) -> Result<Vec<u8>, String> {
+    let (_, target) = resolve_wav_inside(&base_dir, &relative_path)?;
+    fs::read(&target).map_err(|e| format!("Failed to read file: {e}"))
 }
 
 /// Deletes a single sample file located at `base_dir` + `relative_path`. The deletion is
 /// constrained to paths inside `base_dir` and to `.wav` files, as a safety measure.
 #[tauri::command]
 pub async fn delete_sample_file(base_dir: String, relative_path: String) -> Result<(), String> {
-    if !relative_path.ends_with(".wav") {
-        return Err("The relative path must end with .wav".into());
-    }
-
-    let root = PathBuf::from(&base_dir);
-    let mut full_path = root.clone();
-    full_path.push(&relative_path);
-
-    // Guard against path traversal ("../") escaping the sample directory.
-    let canonical_root = root.canonicalize().map_err(|e| format!("Invalid base directory: {e}"))?;
-    let canonical_target = full_path
-        .canonicalize()
-        .map_err(|e| format!("File not found: {e}"))?;
-    if !canonical_target.starts_with(&canonical_root) {
-        return Err("Refusing to delete a file outside of the sample directory".into());
-    }
+    let (canonical_root, canonical_target) = resolve_wav_inside(&base_dir, &relative_path)?;
 
     fs::remove_file(&canonical_target).map_err(|e| format!("Failed to delete file: {e}"))?;
 

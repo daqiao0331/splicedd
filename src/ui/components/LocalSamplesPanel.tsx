@@ -5,11 +5,9 @@ import { startDrag } from "@crabnebula/tauri-plugin-drag";
 import { path } from "@tauri-apps/api";
 
 import { cfg } from "../../config";
-import { LocalSampleFile, readSampleFile } from "../../native";
-import {
-  LocalSamplePack, formatFileSize, loadLocalLibrary, removeLocalSample
-} from "../../local/localSampleManager";
-import { SamplePlaybackContext } from "../playback";
+import { LocalSampleFile, deleteSampleFile, readSampleFile, scanSampleFiles } from "../../native";
+import { LocalSamplePack, formatFileSize, groupByPack } from "../../local/grouping";
+import { SamplePlaybackContext, useAudioPreview } from "../playback";
 
 /**
  * A single downloaded sample in the local library: preview, drag-into-DAW, and delete.
@@ -19,44 +17,18 @@ function LocalSampleEntry({ sample, ctx, onDeleted }: {
   ctx: SamplePlaybackContext,
   onDeleted: () => void
 }) {
-  const [playing, setPlaying] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const audio = document.createElement("audio");
-  audio.onended = () => setPlaying(false);
+  const preview = useAudioPreview(ctx, async () =>
+    new Blob([await readSampleFile(cfg().sampleDir, sample.relativePath)], { type: "audio/wav" })
+  );
 
-  function stop() {
-    audio.pause();
-    audio.currentTime = 0;
-    setPlaying(false);
-  }
-
-  async function handlePlay() {
-    ctx.cancellation?.();
-    if (playing) return;
-
-    if (audio.src == "") {
-      setLoading(true);
-      const bytes = await readSampleFile(cfg().sampleDir, sample.relativePath);
-      setLoading(false);
-      audio.src = URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
-    }
-
-    audio.play();
-    setPlaying(true);
-    ctx.setCancellation(() => stop);
-  }
-
-  async function handleDrag(ev: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-    const origin = document.elementFromPoint(ev.clientX, ev.clientY)?.parentElement;
-    if (origin != null && origin.dataset.draggable === "false") return;
-
+  async function handleDrag() {
     // The file already exists on disk, so dragging just points to it directly.
     startDrag({ item: [await path.join(cfg().sampleDir, sample.relativePath)], icon: "" });
   }
 
   async function handleDelete() {
-    await removeLocalSample(cfg().sampleDir, sample);
-    if (playing) stop();
+    preview.stop();
+    await deleteSampleFile(cfg().sampleDir, sample.relativePath);
     onDeleted();
   }
 
@@ -64,13 +36,13 @@ function LocalSampleEntry({ sample, ctx, onDeleted }: {
     <div className="group flex w-full items-center gap-3 px-2 h-10 rounded
                     hover:bg-white/5 transition-colors cursor-grab select-none text-sm"
     >
-      <button onClick={handlePlay} aria-label={playing ? "Stop" : "Play"} data-draggable="false"
+      <button onClick={preview.toggle} aria-label={preview.playing ? "Stop" : "Play"}
         className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full
                    text-foreground-500 group-hover:text-foreground hover:!text-splice-accent"
       >
-        {loading
+        {preview.loading
           ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-5 h-5" }} />
-          : playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
+          : preview.playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
       </button>
 
       <div className="flex-1 min-w-0 truncate" onMouseDown={handleDrag}>
@@ -81,7 +53,7 @@ function LocalSampleEntry({ sample, ctx, onDeleted }: {
         {formatFileSize(sample.size)}
       </span>
 
-      <button onClick={handleDelete} aria-label="Delete sample" data-draggable="false"
+      <button onClick={handleDelete} aria-label="Delete sample"
         className="w-7 h-7 shrink-0 flex items-center justify-center rounded
                    text-foreground-600 opacity-0 group-hover:opacity-100 hover:!text-danger transition-opacity"
       >
@@ -101,7 +73,8 @@ export default function LocalSamplesPanel({ ctx }: { ctx: SamplePlaybackContext 
 
   async function refresh() {
     setLoading(true);
-    setPacks(await loadLocalLibrary(cfg().sampleDir));
+    const dir = cfg().sampleDir;
+    setPacks(dir.trim() !== "" ? groupByPack(await scanSampleFiles(dir)) : []);
     setLoading(false);
   }
 
@@ -118,7 +91,7 @@ export default function LocalSamplesPanel({ ctx }: { ctx: SamplePlaybackContext 
     );
   }
 
-  if (!cfg().sampleDir || cfg().sampleDir.trim() === "") {
+  if (cfg().sampleDir.trim() === "") {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-4 text-center">
         <FolderOpenIcon className="w-10 text-foreground-600" />

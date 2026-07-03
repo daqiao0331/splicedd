@@ -2,7 +2,7 @@ import { Chip, CircularProgress, Tooltip } from "@nextui-org/react";
 import { MusicalNoteIcon, PlayIcon, StopIcon } from "@heroicons/react/20/solid";
 
 import { Response, ResponseType, fetch } from '@tauri-apps/api/http';
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 
 import * as wav from "node-wav";
@@ -10,13 +10,15 @@ import { checkFileExists, createPlaceholder, writeSampleFile } from "../../nativ
 import { path } from "@tauri-apps/api";
 
 import { cfg } from "../../config";
-import { SamplePlaybackContext } from "../playback";
+import { SamplePlaybackContext, useAudioPreview } from "../playback";
 import { SpliceTag } from "../../splice/entities";
 import { SpliceSample } from "../../splice/api";
 import { decodeSpliceAudio } from "../../splice/decoder";
 
 const getChordTypeDisplay = (type: string | null) =>
   type == null ? "" : type == "major" ? " Major" : " Minor";
+
+const sanitizePath = (x: string) => x.replace(/[<>:"|?* ]/g, "_");
 
 export type TagClickHandler = (tag: SpliceTag) => void;
 
@@ -31,9 +33,11 @@ export default function SampleListEntry(
     onTagClick: TagClickHandler
   }
 ) {
-  const [fgLoading, setFgLoading] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const audio = document.createElement("audio");
+  const [dragLoading, setDragLoading] = useState(false);
+
+  // Cached across re-renders, so hover-prefetching and decoding only ever happen once.
+  const fetchAhead = useRef<Promise<Response<ArrayBuffer>> | null>(null);
+  const decoded = useRef<Uint8Array | null>(null);
 
   const pack = sample.parents.items[0];
   const packCover = pack
@@ -42,64 +46,34 @@ export default function SampleListEntry(
 
   const waveformUrl = sample.files.find(x => x.asset_file_type_slug == "waveform")?.url;
 
-  let decodedSample: Uint8Array | null = null;
-
-  let fetchAhead: Promise<Response<ArrayBuffer>> | null = null;
   function startFetching() {
-    if (fetchAhead != null)
+    if (fetchAhead.current != null)
       return;
 
     const file = sample.files.find(x => x.asset_file_type_slug == "preview_mp3")!;
 
-    fetchAhead = fetch<ArrayBuffer>(file.url, {
+    fetchAhead.current = fetch<ArrayBuffer>(file.url, {
       method: "GET",
       responseType: ResponseType.Binary
     });
   }
 
-  audio.onended = () => setPlaying(false);
-
-  function stop() {
-    audio.pause();
-    audio.currentTime = 0;
-    setPlaying(false);
-  }
-
-  async function handlePlayClick() {
-    ctx.cancellation?.();
-
-    if (playing)
-      return;
-
-    if (audio.src == "") {
-      setFgLoading(true);
-      await ensureAudioDecoded();
-      setFgLoading(false);
-
-      audio.src = URL.createObjectURL(
-        new Blob([decodedSample!], { "type": "audio/mpeg" })
-      );
-    }
-
-    audio.play();
-    setPlaying(true);
-
-    ctx.setCancellation(() => stop);
-  }
-
+  /** Downloads and unscrambles the preview MP3, caching the result. */
   async function ensureAudioDecoded() {
-    if (decodedSample != null)
-      return;
-
-    if (fetchAhead == null) {
+    if (decoded.current == null) {
       startFetching();
+      const resp = await fetchAhead.current!;
+      decoded.current = decodeSpliceAudio(new Uint8Array(resp.data));
     }
 
-    const resp = await fetchAhead;
-    decodedSample = decodeSpliceAudio(new Uint8Array(resp!.data));
+    return decoded.current;
   }
 
-  const sanitizePath = (x: string) => x.replace(/[<>:"|?* ]/g, "_");
+  const preview = useAudioPreview(ctx, async () =>
+    new Blob([await ensureAudioDecoded()], { type: "audio/mpeg" })
+  );
+
+  const busy = dragLoading || preview.loading;
 
   async function handleDrag(ev: React.MouseEvent<HTMLDivElement, MouseEvent>) {
     // Verify that the parent of the element that we began the dragging from
@@ -116,8 +90,8 @@ export default function SampleListEntry(
       icon: ""
     };
 
-    setFgLoading(true);
-    await ensureAudioDecoded();
+    setDragLoading(true);
+    const mp3 = await ensureAudioDecoded();
 
     if (!await checkFileExists(cfg().sampleDir, samplePath)) {
       if (cfg().placeholders) {
@@ -127,7 +101,9 @@ export default function SampleListEntry(
 
       const actx = new AudioContext();
 
-      const samples = await actx.decodeAudioData(decodedSample!.buffer);
+      // decodeAudioData detaches the buffer it's given, so pass a copy to keep the
+      // cached MP3 playable afterwards.
+      const samples = await actx.decodeAudioData(mp3.slice().buffer);
       const channels: Float32Array[] = [];
 
       if (samples.length < 60 * 44100) {
@@ -152,12 +128,11 @@ export default function SampleListEntry(
       if (!cfg().placeholders) {
         startDrag(dragParams);
       }
-
-      setFgLoading(false);
     } else {
-      setFgLoading(false);
       startDrag(dragParams);
     }
+
+    setDragLoading(false);
   }
 
   return (
@@ -166,17 +141,17 @@ export default function SampleListEntry(
                  hover:bg-white/5 transition-colors cursor-grab select-none text-sm"
     >
       { /* when loading, set the cursor for everything to a waiting icon */}
-      {fgLoading && <style> {`* { cursor: wait }`} </style>}
+      {busy && <style> {`* { cursor: wait }`} </style>}
 
       { /* play / stop */}
-      <button onClick={handlePlayClick} aria-label={playing ? "Stop" : "Play"}
+      <button onClick={preview.toggle} aria-label={preview.playing ? "Stop" : "Play"}
         className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full
                    text-foreground-500 group-hover:text-foreground hover:!text-splice-accent"
         data-draggable="false"
       >
-        {fgLoading
+        {busy
           ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-5 h-5" }} />
-          : playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
+          : preview.playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
       </button>
 
       { /* pack thumbnail */}
@@ -214,7 +189,7 @@ export default function SampleListEntry(
       <div className="flex-1 min-w-0 h-full flex items-center" onMouseDown={handleDrag}>
         {waveformUrl &&
           <img src={waveformUrl} alt="" aria-hidden
-            className={`splice-waveform ${playing ? "playing" : ""}`}
+            className={`splice-waveform ${preview.playing ? "playing" : ""}`}
             onError={e => (e.currentTarget.style.display = "none")}
           />
         }
