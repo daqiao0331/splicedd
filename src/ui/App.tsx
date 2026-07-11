@@ -9,12 +9,13 @@ import { cfg } from "../config";
 import { GRAPHQL_URL, SpliceSample, SpliceSearchResponse, createSearchRequest } from "../splice/api";
 import { ChordType, MusicKey, SpliceSampleType, SpliceSortBy, SpliceTag } from "../splice/entities";
 
-import SampleListEntry from "./components/SampleListEntry";
+import SampleListEntry, { SampleListHeader } from "./components/SampleListEntry";
 import SettingsModalContent from "./components/SettingsModalContent";
 import KeyScaleSelection from "./components/KeyScaleSelection";
 import Sidebar, { AppView } from "./components/Sidebar";
 import LocalSamplesPanel from "./components/LocalSamplesPanel";
-import { SamplePlaybackCancellation, SamplePlaybackContext } from "./playback";
+import Playbar from "./components/Playbar";
+import { NowPlaying, SamplePlaybackContext } from "./playback";
 
 function App() {
   const settings = useDisclosure({
@@ -64,11 +65,8 @@ function App() {
     musicKey, chordType
   ]);
 
-  const [smplCancellation, smplSetCancellation] = useState<SamplePlaybackCancellation | null>(null);
-  const pbCtx: SamplePlaybackContext = {
-    cancellation: smplCancellation,
-    setCancellation: smplSetCancellation
-  }
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const pbCtx: SamplePlaybackContext = { nowPlaying, setNowPlaying };
 
   function ensureContraintsGathered() {
     if (knownInstruments.length == 0 || knownGenres.length == 0) {
@@ -155,7 +153,7 @@ function App() {
 
       setSearchLoading(false);
 
-      pbCtx.cancellation?.(); // stop any sample that's currently playing
+      pbCtx.nowPlaying?.stop(); // stop any sample that's currently playing
 
       const data = resp.data.data.assetsSearch;
 
@@ -310,14 +308,16 @@ function App() {
         {
           results.length > 0
           ? <div className="flex-1 min-h-0 flex flex-col bg-content1 rounded-lg">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-divider shrink-0">
+              <div className="flex items-center justify-between px-4 py-1.5 border-b border-divider shrink-0">
                 <p className="text-xs text-foreground-500">
                   {resultCount.toLocaleString()} sample{resultCount != 1 ? "s" : ""}
                 </p>
                 { searchLoading && <CircularProgress size="sm" aria-label="Loading results..."/> }
               </div>
 
-              <div ref={resultContainer} className="flex-1 min-h-0 overflow-y-auto px-2 py-2">
+              <div className="px-2 shrink-0"><SampleListHeader/></div>
+
+              <div ref={resultContainer} className="flex-1 min-h-0 overflow-y-auto px-2 pb-2">
                 { results.map(
                   x => <SampleListEntry key={x.uuid} sample={x} onTagClick={handleTagClick} ctx={pbCtx}/>
                 ) }
@@ -352,9 +352,13 @@ function App() {
 
       <Sidebar view={view} onNavigate={setView} onOpenSettings={settings.onOpen} />
 
-      <section className="flex-1 min-w-0 flex flex-col gap-3 p-4">
-        { view == "browse" ? renderBrowse() : <LocalSamplesPanel ctx={pbCtx} /> }
-      </section>
+      <div className="flex-1 min-w-0 flex flex-col">
+        <section className="flex-1 min-h-0 flex flex-col gap-3 p-4">
+          { view == "browse" ? renderBrowse() : <LocalSamplesPanel ctx={pbCtx} /> }
+        </section>
+
+        <Playbar ctx={pbCtx} />
+      </div>
     </main>
   );
 }

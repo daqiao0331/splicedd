@@ -1,8 +1,8 @@
-import { Chip, CircularProgress, Tooltip } from "@nextui-org/react";
-import { MusicalNoteIcon, PlayIcon, StopIcon } from "@heroicons/react/20/solid";
+import { CircularProgress, Tooltip } from "@nextui-org/react";
+import { PlayIcon, StopIcon, ArrowDownTrayIcon, CheckIcon } from "@heroicons/react/20/solid";
 
 import { Response, ResponseType, fetch } from '@tauri-apps/api/http';
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { startDrag } from "@crabnebula/tauri-plugin-drag";
 
 import * as wav from "node-wav";
@@ -14,17 +14,39 @@ import { SamplePlaybackContext, useAudioPreview } from "../playback";
 import { SpliceTag } from "../../splice/entities";
 import { SpliceSample } from "../../splice/api";
 import { decodeSpliceAudio } from "../../splice/decoder";
+import Waveform from "./Waveform";
 
 const getChordTypeDisplay = (type: string | null) =>
-  type == null ? "" : type == "major" ? " Major" : " Minor";
+  type == null ? "" : type == "major" ? "maj" : "min";
 
 const sanitizePath = (x: string) => x.replace(/[<>:"|?* ]/g, "_");
 
 export type TagClickHandler = (tag: SpliceTag) => void;
 
 /**
- * A dense, single-line view of a Splice sample, styled after the 2019 Splice desktop
- * browser: play button, pack thumbnail, name + tags, inline waveform, and metadata columns.
+ * The column header matching {@link SampleListEntry}'s layout, as in the 2019 Splice
+ * sounds browser. Keep the widths in sync with the row below.
+ */
+export function SampleListHeader() {
+  const label = "text-[10px] uppercase tracking-wider text-foreground-600 font-semibold";
+  return (
+    <div className="flex w-full items-center gap-3 px-2 h-7 border-b border-divider select-none shrink-0">
+      <span className="w-7 shrink-0" />
+      <span className="w-7 shrink-0" />
+      <span className={`w-[30%] min-w-44 shrink-0 ${label}`}>Filename</span>
+      <span className="flex-1 min-w-0" />
+      <span className={`w-10 shrink-0 text-right ${label}`}>Time</span>
+      <span className={`w-12 shrink-0 text-right ${label}`}>Key</span>
+      <span className={`w-12 shrink-0 text-right ${label}`}>BPM</span>
+      <span className="w-7 shrink-0" />
+    </div>
+  );
+}
+
+/**
+ * A dense sample row styled after the 2019 Splice sounds browser: play button, pack art,
+ * filename with tags, a seekable waveform with teal progress, time / key / BPM columns,
+ * and a download button. The row itself can be dragged into a DAW.
  */
 export default function SampleListEntry(
   { sample, ctx, onTagClick }: {
@@ -34,6 +56,7 @@ export default function SampleListEntry(
   }
 ) {
   const [dragLoading, setDragLoading] = useState(false);
+  const [downloaded, setDownloaded] = useState(false);
 
   // Cached across re-renders, so hover-prefetching and decoding only ever happen once.
   const fetchAhead = useRef<Promise<Response<ArrayBuffer>> | null>(null);
@@ -45,6 +68,12 @@ export default function SampleListEntry(
     : "img/missing-cover.png";
 
   const waveformUrl = sample.files.find(x => x.asset_file_type_slug == "waveform")?.url;
+  const name = sample.name.split("/").pop();
+  const samplePath = sanitizePath(pack.name) + "/" + sanitizePath(sample.name);
+
+  useEffect(() => {
+    checkFileExists(cfg().sampleDir, samplePath).then(setDownloaded).catch(() => {});
+  }, []);
 
   function startFetching() {
     if (fetchAhead.current != null)
@@ -69,38 +98,20 @@ export default function SampleListEntry(
     return decoded.current;
   }
 
-  const preview = useAudioPreview(ctx, async () =>
-    new Blob([await ensureAudioDecoded()], { type: "audio/mpeg" })
+  const preview = useAudioPreview(
+    ctx,
+    { name: name ?? sample.name, packName: pack?.name, packCover },
+    async () => new Blob([await ensureAudioDecoded()], { type: "audio/mpeg" })
   );
 
   const busy = dragLoading || preview.loading;
 
-  async function handleDrag(ev: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-    // Verify that the parent of the element that we began the dragging from
-    // is not explicitly marked as non-draggable (as it may be clicked etc.)
-    const dragOrigin = document.elementFromPoint(ev.clientX, ev.clientY)?.parentElement;
-    if (dragOrigin != null && dragOrigin.dataset.draggable === "false") {
-      return;
-    }
-
-    const samplePath = sanitizePath(pack.name) + "/" + sanitizePath(sample.name);
-
-    const dragParams = {
-      item: [await path.join(cfg().sampleDir, samplePath)],
-      icon: ""
-    };
-
-    setDragLoading(true);
+  /** Decodes the sample and writes it to the sample directory as a .wav. */
+  async function writeToDisk() {
     const mp3 = await ensureAudioDecoded();
 
-    if (!await checkFileExists(cfg().sampleDir, samplePath)) {
-      if (cfg().placeholders) {
-        await createPlaceholder(cfg().sampleDir, samplePath);
-        startDrag(dragParams);
-      }
-
-      const actx = new AudioContext();
-
+    const actx = new AudioContext();
+    try {
       // decodeAudioData detaches the buffer it's given, so pass a copy to keep the
       // cached MP3 playable afterwards.
       const samples = await actx.decodeAudioData(mp3.slice().buffer);
@@ -124,37 +135,79 @@ export default function SampleListEntry(
         bitDepth: 16,
         sampleRate: samples.sampleRate
       }));
+    } finally {
+      actx.close();
+    }
 
-      if (!cfg().placeholders) {
+    setDownloaded(true);
+  }
+
+  async function handleDownload() {
+    if (downloaded || busy)
+      return;
+
+    setDragLoading(true);
+    if (!await checkFileExists(cfg().sampleDir, samplePath)) {
+      await writeToDisk();
+    }
+    setDownloaded(true);
+    setDragLoading(false);
+  }
+
+  async function handleDrag(ev: React.MouseEvent<HTMLDivElement, MouseEvent>) {
+    // Verify that the parent of the element that we began the dragging from
+    // is not explicitly marked as non-draggable (as it may be clicked etc.)
+    const dragOrigin = document.elementFromPoint(ev.clientX, ev.clientY)?.parentElement;
+    if (dragOrigin != null && dragOrigin.dataset.draggable === "false") {
+      return;
+    }
+
+    const dragParams = {
+      item: [await path.join(cfg().sampleDir, samplePath)],
+      icon: ""
+    };
+
+    setDragLoading(true);
+
+    if (!await checkFileExists(cfg().sampleDir, samplePath)) {
+      if (cfg().placeholders) {
+        await createPlaceholder(cfg().sampleDir, samplePath);
+        startDrag(dragParams);
+        await writeToDisk();
+      } else {
+        await writeToDisk();
         startDrag(dragParams);
       }
     } else {
       startDrag(dragParams);
     }
 
+    setDownloaded(true);
     setDragLoading(false);
   }
 
   return (
     <div onMouseOver={startFetching}
-      className="group flex w-full items-center gap-3 px-2 h-11 rounded
+      className="group flex w-full items-center gap-3 px-2 h-11 border-b border-divider
                  hover:bg-white/5 transition-colors cursor-grab select-none text-sm"
     >
       { /* when loading, set the cursor for everything to a waiting icon */}
       {busy && <style> {`* { cursor: wait }`} </style>}
 
       { /* play / stop */}
-      <button onClick={preview.toggle} aria-label={preview.playing ? "Stop" : "Play"}
-        className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full
-                   text-foreground-500 group-hover:text-foreground hover:!text-splice-accent"
+      <button onClick={() => preview.play()} aria-label={preview.playing ? "Stop" : "Play"}
+        className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full border
+                    ${preview.playing
+                      ? "border-splice-accent text-splice-accent"
+                      : "border-white/15 text-foreground-400 group-hover:text-foreground hover:!border-splice-accent hover:!text-splice-accent"}`}
         data-draggable="false"
       >
         {busy
-          ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-5 h-5" }} />
-          : preview.playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
+          ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-4 h-4" }} />
+          : preview.playing ? <StopIcon className="w-3.5" /> : <PlayIcon className="w-3.5 ml-0.5" />}
       </button>
 
-      { /* pack thumbnail */}
+      { /* pack art */}
       <Tooltip content={
         <div className="flex flex-col gap-2 p-2">
           <img src={packCover} alt={pack?.name} width={128} height={128} />
@@ -164,51 +217,50 @@ export default function SampleListEntry(
         <a href={pack ? `https://splice.com/sounds/labels/${pack.permalink_base_url}` : undefined}
           target="_blank" data-draggable="false" className="shrink-0"
         >
-          <img src={packCover} alt={pack?.name} width={28} height={28} className="rounded" />
+          <img src={packCover} alt={pack?.name} width={28} height={28} className="rounded-sm" />
         </a>
       </Tooltip>
 
-      { /* name + tags */}
-      <div className="w-[34%] min-w-0 shrink-0" onMouseDown={handleDrag}>
-        <div className="flex items-center gap-1 truncate">
-          <span className="truncate">{sample.name.split("/").pop()}</span>
+      { /* filename + tags */}
+      <div className="w-[30%] min-w-44 shrink-0 overflow-hidden" onMouseDown={handleDrag}>
+        <div className="truncate text-[13px] text-foreground group-hover:text-splice-accent transition-colors">
+          {name}
         </div>
-        <div className="flex gap-1 overflow-hidden h-4">
+        <div className="flex gap-2 overflow-hidden h-4 text-[10px] text-foreground-500">
           {sample.tags.slice(0, 4).map(x => (
-            <Chip key={x.uuid} size="sm" variant="flat"
-              className="h-4 px-1 text-[10px] cursor-pointer"
-              onClick={() => onTagClick(x)} data-draggable="false"
+            <button key={x.uuid} onClick={() => onTagClick(x)} data-draggable="false"
+              className="hover:text-splice-accent hover:underline shrink-0"
             >
               {x.label}
-            </Chip>
+            </button>
           ))}
         </div>
       </div>
 
-      { /* inline waveform — fills the remaining space */}
-      <div className="flex-1 min-w-0 h-full flex items-center" onMouseDown={handleDrag}>
-        {waveformUrl &&
-          <img src={waveformUrl} alt="" aria-hidden
-            className={`splice-waveform ${preview.playing ? "playing" : ""}`}
-            onError={e => (e.currentTarget.style.display = "none")}
-          />
-        }
-      </div>
+      { /* waveform with playback progress; click to seek */}
+      <Waveform url={waveformUrl} progress={preview.progress} onSeek={at => preview.play(at)} />
 
       { /* metadata columns */}
-      <div className="flex items-center gap-4 shrink-0 text-xs font-medium text-foreground-500 tabular-nums"
-        onMouseDown={handleDrag}
+      <span className="w-10 shrink-0 text-right text-xs text-foreground-500 tabular-nums" onMouseDown={handleDrag}>
+        {(sample.duration / 1000).toFixed(1)}s
+      </span>
+      <span className="w-12 shrink-0 text-right text-xs text-foreground-500 tabular-nums" onMouseDown={handleDrag}>
+        {sample.key != null ? `${sample.key.toUpperCase()}${getChordTypeDisplay(sample.chord_type)}` : "—"}
+      </span>
+      <span className="w-12 shrink-0 text-right text-xs text-foreground-500 tabular-nums" onMouseDown={handleDrag}>
+        {sample.bpm ?? "—"}
+      </span>
+
+      { /* download */}
+      <button onClick={handleDownload} data-draggable="false"
+        aria-label={downloaded ? "Downloaded" : "Download"}
+        className={`w-7 h-7 shrink-0 flex items-center justify-center rounded
+                    ${downloaded
+                      ? "text-splice-accent"
+                      : "text-foreground-500 hover:!text-splice-accent"}`}
       >
-        <span className="w-16 flex items-center gap-1 justify-end">
-          {sample.key != null && <>
-            <MusicalNoteIcon className="w-3.5" />
-            {`${sample.key.toUpperCase()}${getChordTypeDisplay(sample.chord_type)}`}
-          </>}
-        </span>
-        <span className="w-14 text-right">{sample.bpm != null ? `${sample.bpm} BPM` : ""}</span>
-        <span className="w-12 text-right">{`${(sample.duration / 1000).toFixed(1)}s`}</span>
-        <span className="w-12 text-right text-foreground-600 lowercase">{sample.asset_category_slug}</span>
-      </div>
+        {downloaded ? <CheckIcon className="w-4" /> : <ArrowDownTrayIcon className="w-4" />}
+      </button>
     </div>
   );
 }

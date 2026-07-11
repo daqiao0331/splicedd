@@ -17,8 +17,10 @@ function LocalSampleEntry({ sample, ctx, onDeleted }: {
   ctx: SamplePlaybackContext,
   onDeleted: () => void
 }) {
-  const preview = useAudioPreview(ctx, async () =>
-    new Blob([await readSampleFile(cfg().sampleDir, sample.relativePath)], { type: "audio/wav" })
+  const preview = useAudioPreview(
+    ctx,
+    { name: sample.name, packName: sample.pack },
+    async () => new Blob([await readSampleFile(cfg().sampleDir, sample.relativePath)], { type: "audio/wav" })
   );
 
   async function handleDrag() {
@@ -33,16 +35,18 @@ function LocalSampleEntry({ sample, ctx, onDeleted }: {
   }
 
   return (
-    <div className="group flex w-full items-center gap-3 px-2 h-10 rounded
+    <div className="group flex w-full items-center gap-3 px-2 h-10 border-b border-divider
                     hover:bg-white/5 transition-colors cursor-grab select-none text-sm"
     >
-      <button onClick={preview.toggle} aria-label={preview.playing ? "Stop" : "Play"}
-        className="w-7 h-7 shrink-0 flex items-center justify-center rounded-full
-                   text-foreground-500 group-hover:text-foreground hover:!text-splice-accent"
+      <button onClick={() => preview.play()} aria-label={preview.playing ? "Stop" : "Play"}
+        className={`w-7 h-7 shrink-0 flex items-center justify-center rounded-full border
+                    ${preview.playing
+                      ? "border-splice-accent text-splice-accent"
+                      : "border-white/15 text-foreground-400 group-hover:text-foreground hover:!border-splice-accent hover:!text-splice-accent"}`}
       >
         {preview.loading
-          ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-5 h-5" }} />
-          : preview.playing ? <StopIcon className="w-5" /> : <PlayIcon className="w-5" />}
+          ? <CircularProgress size="sm" aria-label="Loading sample..." classNames={{ svg: "w-4 h-4" }} />
+          : preview.playing ? <StopIcon className="w-3.5" /> : <PlayIcon className="w-3.5 ml-0.5" />}
       </button>
 
       <div className="flex-1 min-w-0 truncate" onMouseDown={handleDrag}>

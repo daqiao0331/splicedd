@@ -34,16 +34,23 @@ body {
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Inline result waveform — tinted towards the Splice teal accent. */
-.splice-waveform {
-  height: 26px;
-  width: 100%;
-  object-fit: cover;
-  opacity: 0.55;
-  filter: grayscale(1) brightness(1.6) sepia(1) hue-rotate(120deg) saturate(3);
+/*
+ * Inline result waveforms, recolored like the 2019 Splice sounds browser: the
+ * waveform image's alpha channel is used as a mask, with a gray resting layer
+ * and a teal layer on top that is clipped to the playback progress.
+ */
+.splice-wf-base, .splice-wf-progress {
+  -webkit-mask-size: 100% 100%;
+  mask-size: 100% 100%;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
   pointer-events: none;
 }
 
-.splice-waveform.playing {
-  opacity: 0.95;
+.splice-wf-base {
+  background-color: #565d68;
+}
+
+.splice-wf-progress {
+  background-color: #1ecbb0;
 }

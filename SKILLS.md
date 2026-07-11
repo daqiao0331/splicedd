@@ -26,8 +26,12 @@ beside a DAW.
 - The content area fills the rest of the window.
 - The **search bar** and **filter row** (type toggle, BPM, Key, Genres, Instruments,
   Tags, Sort) are compact and sit at the top of the Browse view.
-- Result rows are **dense** (single-line, ~44px tall): play/stop button, inline
-  **waveform**, name, tag pills, key, BPM, duration, and a draggable pack thumbnail.
+- A **column header** row (Filename / Time / Key / BPM) sits above the results.
+- Result rows are **dense** (single-line, ~44px tall): play/stop button, pack art,
+  filename with tag links, a **seekable waveform** that fills teal with playback
+  progress, time / key / BPM columns, and a per-row **download button**.
+- A **bottom playbar** shows the current sample (art, name, pack) with play/pause,
+  a seekable progress bar, and elapsed/total time — persisting across views.
 - The whole UI uses a dark 2019-Splice palette (near-black panels, teal accent).
 - The Tauri window opens at a compact, plugin-like size.
 

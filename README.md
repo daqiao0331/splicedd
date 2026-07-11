@@ -4,11 +4,16 @@
 
 Based on the original [ascpixi/splicedd](https://github.com/ascpixi/splicedd).
 
+<p align="center">
+  <img src="./etc/screenshot-redesign.png" alt="Browse view with a sample playing" width="720">
+</p>
+
 ## Features
 
 - **Browse** — search Splice with filters for BPM (exact or range), key & scale, genres, instruments, tags, and one-shots vs. loops
-- **Instant preview** — hovering pre-fetches the sample; clicking plays it (only one sample plays at a time)
-- **Drag & drop** — drag a result straight into your DAW; the preview is decoded and saved as a `.wav` into your sample folder on the way
+- **Instant preview** — hovering pre-fetches the sample; clicking plays it; click the **waveform** to seek (it fills teal with playback progress, 2019-style)
+- **Playbar** — a bottom bar shows the current sample with play/pause, seeking, and elapsed/total time
+- **Download & drag** — download a sample with the per-row button, or drag it straight into your DAW; either way it's decoded and saved as a `.wav` into your sample folder
 - **Library** — local sampling management: browse everything you've downloaded, grouped by pack, with preview, drag-into-DAW, and delete-from-disk
 - Compact 2019-Splice-style dark UI (960×600 default window)
 
